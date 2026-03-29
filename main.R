@@ -123,13 +123,10 @@ run_edger <- function(count_dataframe, group) {
 #' 
 #' @examples run_limma(counts_df, design, voom=TRUE)
 run_limma <- function(counts_dataframe, design, group) {
-  #filter and normalise (TMM)
   dge <- DGEList(counts=counts_dataframe)
   keep <- filterByExpr(dge, group = group)
   dge <- dge[keep,,keep.lib.sizes=FALSE]
   dge <- calcNormFactors(dge)
-  
-  #apply voom transform (log2CPM w precision weights)
   v <- limma::voom(dge, design, plot=TRUE)
   fit <- limma::lmFit(v, design)
   fit <- limma::eBayes(fit)
@@ -195,13 +192,23 @@ combine_pval <- function(deseq, edger, limma) {
 #' 1  -9.84 2.23e-180 edgeR  
 #' 2   6.18 5.87e-179 edgeR  
 create_facets <- function(deseq, edger, limma) {
-  deseq <- tibble(deseq,
-                  "logFC" = deseq$log2FoldChange, 
-                  "padj" = deseq$padj)
-  
-    return(NULL)
+  deseq_tbl <- tibble(
+    logFC   = deseq$log2FoldChange,
+    padj    = deseq$padj,
+    package = "DESeq2"
+  )
+  edger_tbl <- tibble(
+    logFC   = edger$logFC,
+    padj    = edger$PValue,      # edgeR has no padj, use PValue
+    package = "edgeR"
+  )
+  limma_tbl <- tibble(
+    logFC   = limma$logFC,
+    padj    = limma$adj.P.Val,
+    package = "limma"
+  )
+  return(rbind(deseq_tbl, edger_tbl, limma_tbl))
 }
-
 #' Create an attractive volcano plot of three diff. exp. packages' data.
 #'
 #' @param volcano_data 
@@ -229,6 +236,21 @@ create_facets <- function(deseq, edger, limma) {
 #'
 #' @examples p <- theme_plot(volcano)
 theme_plot <- function(volcano_data) {
-    return(NULL)
+  p <- volcano_data %>%
+    ggplot(aes(x = logFC, y = -log10(padj), color = logFC)) + 
+    geom_point() + 
+    scale_color_gradient2(
+      low      = "#3A86FF",
+      mid      = "grey80",
+      high     = "#FF006E",
+      midpoint = 0,
+      name     = "log2 FC"
+    ) + 
+    geom_hline(yintercept = -log10(0.05), linetype = "dashed", color = "grey40") +
+    geom_vline(xintercept = c(-1, 1),     linetype = "dashed", color = "grey40") +
+    facet_wrap(~package) +
+    theme_bw()
+    
+  return(p)
 }
 
