@@ -96,7 +96,7 @@ run_edger <- function(count_dataframe, group) {
   y <- y[keep, , keep.lib.sizes = FALSE]
   y <- normLibSizes(y)
   design <- model.matrix(~ group)
-  y <- estimateDisp(y, design, robust=TRUE)
+  y <- estimateDisp(y, design, robust=FALSE)
   et <- exactTest(y)
   res <- as.data.frame(et)
   return(res[, c("logFC", "logCPM", "PValue")])
