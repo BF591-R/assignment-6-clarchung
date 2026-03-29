@@ -33,7 +33,10 @@ for (package in libs) {
 #'
 #' @examples counts_df <- load_n_trim("/path/to/counts/verse_counts.tsv")
 load_n_trim <- function(filename) {
-    return(NULL)
+  counts <- read_tsv(filename) %>%
+    select("gene", "vP0_1", "vP0_2", "vAd_1", "vAd_2") %>% 
+    column_to_rownames("gene")
+  return(counts)
 }
 
 #' Perform a DESeq2 analysis of rna seq data
@@ -57,7 +60,18 @@ load_n_trim <- function(filename) {
 #'
 #' @examples run_deseq(counts_df, coldata, 10, "condition_day4_vs_day7")
 run_deseq <- function(count_dataframe, coldata, count_filter, condition_name) {
-    return(NULL)
+  
+  levels <- str_match(condition_name, "condition_(.*?)_vs_(.*)")[,2:3]
+  coldata$condition <- factor(coldata$condition, levels = c(levels[2], levels[1]))
+  
+  dds<- DESeqDataSetFromMatrix(countData = count_dataframe,
+                               colData = coldata, 
+                               design = ~ condition)
+  dds <- dds[rowSums(counts(dds)) >= count_filter, ]
+  
+  dds <- DESeq(dds)
+  res <- results(dds, contrast = c("condition", levels[1], levels[2]))
+  return(res)
 }
 
 #### edgeR ####
@@ -77,7 +91,15 @@ run_deseq <- function(count_dataframe, coldata, count_filter, condition_name) {
 #'
 #' @examples run_edger(counts_df, group)
 run_edger <- function(count_dataframe, group) {
-    return(NULL)
+  y <- DGEList(counts = count_dataframe, group = group)
+  keep <- filterByExpr(y, group = group)
+  y <- y[keep, , keep.lib.sizes = FALSE]
+  y <- normLibSizes(y)
+  design <- model.matrix(~ group)
+  y <- estimateDisp(y, design, robust=TRUE)
+  et <- exactTest(y)
+  res <- as.data.frame(et)
+  return(res[, c("logFC", "logCPM", "PValue")])
 }
 
  #### limma ####
@@ -101,7 +123,18 @@ run_edger <- function(count_dataframe, group) {
 #' 
 #' @examples run_limma(counts_df, design, voom=TRUE)
 run_limma <- function(counts_dataframe, design, group) {
-    return(NULL)
+  #filter and normalise (TMM)
+  dge <- DGEList(counts=counts_dataframe)
+  keep <- filterByExpr(dge, group = group)
+  dge <- dge[keep,,keep.lib.sizes=FALSE]
+  dge <- calcNormFactors(dge)
+  
+  #apply voom transform (log2CPM w precision weights)
+  v <- limma::voom(dge, design, plot=TRUE)
+  fit <- limma::lmFit(v, design)
+  fit <- limma::eBayes(fit)
+  res <- topTable(fit, coef = ncol(design), number = Inf, sort.by = "P")
+  return(res)
 }
 
 #### ggplot ####
@@ -133,7 +166,12 @@ run_limma <- function(counts_dataframe, design, group) {
 #' 2 deseq   9.97e-261
 #' 3 deseq   1.16e-206
 combine_pval <- function(deseq, edger, limma) {
-    return(NULL)
+  tib <- tibble( 
+    "deseq" = deseq$padj,
+    "edger" = edger$padj,
+    "limma" = limma$adj.P.Val)
+  long_tib <- gather(tib, 'package', 'pval')
+  return(long_tib)
 }
 
 #' Create three separate facets for each of the diff. exp. pacakges.
@@ -157,6 +195,10 @@ combine_pval <- function(deseq, edger, limma) {
 #' 1  -9.84 2.23e-180 edgeR  
 #' 2   6.18 5.87e-179 edgeR  
 create_facets <- function(deseq, edger, limma) {
+  deseq <- tibble(deseq,
+                  "logFC" = deseq$log2FoldChange, 
+                  "padj" = deseq$padj)
+  
     return(NULL)
 }
 
